@@ -9,7 +9,9 @@ import time
 from pathlib import Path
 
 from agent.runtime_cwd import resolve_agent_cwd, scope_terminal_cwd, scoped_session_cwd
+from tools.approval import get_current_session_key
 from tools.terminal_scope import terminal_env
+from tools.terminal_tool import get_session_cwd
 
 _LOG = logging.getLogger(__name__)
 _MAX_OUTPUT = 16 * 1024
@@ -50,7 +52,7 @@ def _run(command, cwd, platform, timeout):
 
 
 def register(ctx):
-    def append_footer(response_text: str, platform: str = '', **_kwargs) -> str | None:
+    def append_footer(response_text: str, platform: str = '', session_id: str = '', **_kwargs) -> str | None:
         if not response_text.strip():
             return None
         command = ctx.get_config('command')
@@ -73,7 +75,10 @@ def register(ctx):
         if (terminal_env('TERMINAL_ENV', '').strip() or 'local') != 'local':
             return None
         try:
-            declared = scoped_session_cwd() or scope_terminal_cwd()
+            # Use the terminal's routing key, not the transcript ID, when both exist.
+            key = get_current_session_key(default='') or session_id
+            recorded = get_session_cwd(key) if key else None
+            declared = recorded or scoped_session_cwd() or scope_terminal_cwd()
             cwd = Path(declared).expanduser().absolute() if declared else resolve_agent_cwd()
             footer = _run(command, cwd, platform, timeout)
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
