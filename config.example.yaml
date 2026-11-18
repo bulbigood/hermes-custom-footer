@@ -1,0 +1,12 @@
+# Merge into the active Hermes profile's config.yaml; do not replace the file.
+plugins:
+  enabled:
+    - custom-footer
+  entries:
+    custom-footer:
+      settings:
+        command:
+          - /absolute/path/to/python3
+          - /absolute/path/to/hermes-home/plugins/custom-footer/git_footer.py
+        timeout_seconds: 2.0
+        # platforms: [telegram]

@@ -1,0 +1,5 @@
+name: custom-footer
+version: '2.0.0'
+description: Append output from a configured local command to final agent replies.
+provides_hooks:
+  - transform_llm_output
