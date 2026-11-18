@@ -48,18 +48,47 @@ class FooterTest(unittest.TestCase):
         self.assertIsNone(callback(response_text=' ', platform='telegram'))
         self.assertEqual(callback(response_text='Answer', platform='telegram'), 'Answer\n\nfooter')
 
-    def test_bundled_git_command_preserves_previous_footer(self):
+    def test_bundled_git_command_formats_git_and_non_git_directories(self):
         script = str(Path(__file__).with_name('git_footer.py').resolve())
         callback = self.hook(command=[sys.executable, script], timeout_seconds=2)
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp).resolve()
             token = set_session_cwd(str(path))
             try:
-                self.assertEqual(callback(response_text='Answer'), f'Answer\n\n```text\nno git\n{path}\n```')
+                self.assertEqual(callback(response_text='Answer'), f'Answer\n\n```text\n{path}\n```')
                 subprocess.run(['/usr/bin/git', 'init', '-q', '-b', 'main', str(path)], check=True)
                 (path / 'untracked').touch()
                 self.assertEqual(callback(response_text='Answer'),
-                                 f'Answer\n\n```text\nBranch: main | Worktree: dirty | Pushed: unknown (no upstream)\n{path}\n```')
+                                 f'Answer\n\n```text\n{path}\nBranch: main\nWorktree: dirty | Pushed: unknown (no upstream)\n```')
+            finally:
+                reset_session_cwd(token)
+
+    def test_git_footer_shows_only_dirty_or_unpushed_status(self):
+        script = str(Path(__file__).with_name('git_footer.py').resolve())
+        callback = self.hook(command=[sys.executable, script], timeout_seconds=2)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp).resolve()
+
+            def git(*args):
+                subprocess.run(['/usr/bin/git', '-c', 'user.name=Footer Test', '-c',
+                                'user.email=footer@example.invalid', '-c', 'commit.gpgsign=false',
+                                '-c', 'core.hooksPath=/dev/null', *args], cwd=path, check=True)
+
+            git('init', '-q', '-b', 'main')
+            git('commit', '-q', '--allow-empty', '-m', 'Initial')
+            git('branch', 'upstream')
+            git('branch', '-q', '--set-upstream-to=upstream')
+            token = set_session_cwd(str(path))
+            try:
+                prefix = f'Answer\n\n```text\n{path}\nBranch: main\n'
+                self.assertEqual(callback(response_text='Answer'), prefix + '```')
+                (path / 'untracked').touch()
+                self.assertEqual(callback(response_text='Answer'), prefix + 'Worktree: dirty\n```')
+                git('commit', '-q', '--allow-empty', '-m', 'Local change')
+                self.assertEqual(callback(response_text='Answer'),
+                                 prefix + 'Worktree: dirty | Pushed: no (1 commits)\n```')
+                (path / 'untracked').unlink()
+                self.assertEqual(callback(response_text='Answer'), prefix + 'Pushed: no (1 commits)\n```')
             finally:
                 reset_session_cwd(token)
 
