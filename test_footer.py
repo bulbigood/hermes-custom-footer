@@ -138,6 +138,47 @@ class FooterTest(unittest.TestCase):
             finally:
                 reset_session_cwd(token)
 
+    def test_git_footer_shows_detached_commit_and_only_exact_remote_branch_tips(self):
+        script = Path(__file__).with_name('git_footer.py').resolve()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp).resolve()
+            repo, worktree = path / 'repo', path / 'worktree'
+
+            def git(*args):
+                return subprocess.check_output(
+                    ['/usr/bin/git', '-C', str(repo), '-c', 'user.name=Footer Test',
+                     '-c', 'user.email=footer@example.invalid', '-c', 'commit.gpgsign=false',
+                     '-c', 'core.hooksPath=/dev/null', *args], text=True,
+                ).strip()
+
+            repo.mkdir()
+            git('init', '-q', '-b', 'main')
+            git('commit', '-q', '--allow-empty', '-m', 'Initial')
+            oid = git('rev-parse', 'HEAD')
+            git('worktree', 'add', '-q', '--detach', str(worktree), oid)
+            git('tag', 'release', oid)
+            git('branch', 'local-match', oid)
+            git('commit', '-q', '--allow-empty', '-m', 'Later')
+            git('update-ref', 'refs/remotes/origin/later', git('rev-parse', 'HEAD'))
+            for ref, suffix in (
+                (None, ''),
+                ('refs/remotes/origin/main', ' — origin/main'),
+                ('refs/remotes/another/main', ' — origin/main (1 more)'),
+                ('refs/remotes/origin/release/next', ' — origin/main (2 more)'),
+            ):
+                with self.subTest(ref=ref):
+                    if ref:
+                        git('update-ref', ref, oid)
+                    if ref == 'refs/remotes/origin/main':
+                        git('symbolic-ref', 'refs/remotes/origin/HEAD', ref)
+                    footer = subprocess.check_output([sys.executable, str(script)], cwd=worktree, text=True)
+                    self.assertEqual(footer.splitlines(), ['```text', str(worktree),
+                                     f'Branch: (detached) {oid[:8]}{suffix}', '```'])
+
+            (worktree / 'untracked').touch()
+            footer = subprocess.check_output([sys.executable, str(script)], cwd=worktree, text=True)
+            self.assertEqual(footer.splitlines()[3:], ['Worktree: dirty', '```'])
+
     def test_missing_or_failed_command_leaves_answer_unchanged(self):
         for callback in (self.hook(), self.hook('pass'), self.hook('print("oops"); raise SystemExit(2)'),
                          self.hook('import time; time.sleep(10)', timeout_seconds=0.05),

@@ -10,6 +10,8 @@ With the bundled Git footer, you can tell at a glance:
 - **Where the agent is working:** the footer shows the session's current working directory.
 - **What Git sees:** the footer shows the current branch and whether the working tree is clean or has uncommitted changes.
 
+For a detached checkout, the footer shows the first eight characters of the commit ID, e.g. `Branch: (detached) 4e259d70`. If locally known remote-tracking branches point directly to that commit, it adds one of them and counts any others: `Branch: (detached) 4e259d70 — origin/main (2 more)`. It prefers `origin/*`, then sorts by ref name within that preference. Symbolic aliases such as `origin/HEAD` do not count. The footer does not fetch or contact the remote to find a match.
+
 ![Telegram reply with a footer showing the working directory, branch main, and a dirty working tree](docs/images/telegram-footer.jpg)
 
 ## Install
